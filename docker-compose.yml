@@ -1,0 +1,29 @@
+# =============================================================
+# supply-chain-ams-stack — orquestador único
+# =============================================================
+# Levanta supply-chain-ams-agent + supply-chain-ams-platform en
+# un solo `docker compose up`. Usa la directiva `include:` que
+# Compose 2.20+ soporta para componer múltiples compose files
+# manteniendo el aislamiento por proyecto.
+#
+# Uso:
+#   cd /c/Users/VMATTA/Desktop/supply-chain-ams-stack
+#   docker compose up -d
+#   docker compose ps          # ve los 13 contenedores
+#   docker compose logs -f backend
+#   docker compose down        # baja todo
+#
+# Cada subproyecto sigue siendo independiente:
+#   docker compose -f ../supply-chain-ams-agent/docker-compose.yml up
+#
+# Requisitos:
+# - Docker Compose 2.20+ (probar con `docker compose version`).
+# - Las rutas relativas asumen que esta carpeta es hermana de
+#   supply-chain-ams-agent y supply-chain-ams-platform.
+# =============================================================
+
+include:
+  - path: ../supply-chain-ams-agent/docker-compose.yml
+    env_file: ../supply-chain-ams-agent/.env
+  - path: ../supply-chain-ams-platform/docker-compose.yml
+    env_file: ../supply-chain-ams-platform/.env
