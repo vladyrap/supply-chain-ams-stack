@@ -1,11 +1,43 @@
 # supply-chain-ams-stack
 
-> Orquestador único para levantar **agent + platform** con un solo comando, sin tocar los compose individuales de cada proyecto.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-Active-success)]()
+[![Docker Compose](https://img.shields.io/badge/Docker_Compose-2.20+-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![13 containers](https://img.shields.io/badge/Containers-13-2496ED)]()
+[![Made with Claude Code](https://img.shields.io/badge/Made_with-Claude_Code-D97757?logo=anthropic&logoColor=white)](https://claude.com/claude-code)
 
-## Estructura
+> **Orquestador único** para levantar `supply-chain-ams-agent` + `supply-chain-ams-platform` con un solo `docker compose up`, sin tocar los compose individuales de cada proyecto.
+>
+> Usa la directiva `include:` de Compose 2.20+ para mantener los proyectos aislados pero con ciclo de vida unificado.
+
+## 🧭 Repos relacionados
+
+| Repo | Rol |
+|---|---|
+| [`supply-chain-ams-agent`](https://github.com/vladyrap/supply-chain-ams-agent) | Backend Fastify + LLM + DB + workers + Twilio Voice |
+| [`supply-chain-ams-platform`](https://github.com/vladyrap/supply-chain-ams-platform) | UI Next.js — 23 módulos, war-room 3D, Jaimito, voz |
+| [`supply-chain-ams-stack`](https://github.com/vladyrap/supply-chain-ams-stack) **← estás aquí** | Orquestador `include:` para levantar todo junto |
+
+## 🚀 Quickstart
+
+Los 3 repos como hermanos en el mismo parent directory:
+
+```bash
+git clone https://github.com/vladyrap/supply-chain-ams-agent
+git clone https://github.com/vladyrap/supply-chain-ams-platform
+git clone https://github.com/vladyrap/supply-chain-ams-stack
+cd supply-chain-ams-stack
+# Editar ../supply-chain-ams-agent/.env con tu GEMINI_API_KEY
+docker compose up -d
+docker compose ps     # ve los 13 contenedores
+```
+
+UI en http://localhost:6700.
+
+## 📁 Estructura
 
 ```
-Desktop/
+parent/
 ├── supply-chain-ams-agent/         backend + worker + Whisper + DB + observability
 ├── supply-chain-ams-platform/      Next.js UI multi-módulo con voz
 └── supply-chain-ams-stack/         ← este (solo docker-compose.yml + README)
