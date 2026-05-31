@@ -1,6 +1,19 @@
 .env
 .env.local
 .env.*.local
+.env.production
+!.env.production.example
+*.pem
+*.key
+
+# Backups
+backups/
+*.sql.gz
+*.dump
+
 .DS_Store
 Thumbs.db
 *.log
+
+.vscode/
+.idea/

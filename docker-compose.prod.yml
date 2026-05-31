@@ -1,0 +1,235 @@
+# =============================================================
+# supply-chain-ams-stack · PRODUCCIÓN
+# =============================================================
+# Versión optimizada para VPS chico (2-4 vCPU, 4-8 GB RAM).
+#
+# Diferencias con docker-compose.yml (dev):
+# - Sin Elastic/Kibana/Logstash/Prometheus/Grafana por default.
+#   Activar con --profile observability si el VPS lo aguanta.
+# - Sin Whisper por default (consume ~1 GB RAM idle). Activar con --profile voice.
+# - Caddy como reverse proxy con HTTPS automático (Let's Encrypt).
+# - Restart policies always; healthchecks estrictos.
+# - Sin exponer puertos 6601/6700 al host; sólo 80/443 públicos vía Caddy.
+# - Volúmenes persistentes con nombre fijo para backups.
+#
+# Uso:
+#   cp .env.production.example .env
+#   nano .env                    # completar valores reales
+#   docker compose -f docker-compose.prod.yml up -d
+#   docker compose -f docker-compose.prod.yml --profile observability up -d
+# =============================================================
+
+services:
+
+  # -------------------------------------------------------------
+  # Caddy — reverse proxy + HTTPS automático con Let's Encrypt
+  # -------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: ams-prod-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"      # HTTP/3
+    volumes:
+      - ./Caddyfile.prod:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      AMS_DOMAIN: ${AMS_DOMAIN:-ams.miespejo.cl}
+      AMS_API_DOMAIN: ${AMS_API_DOMAIN:-api.ams.miespejo.cl}
+      AMS_BASIC_AUTH: ${AMS_BASIC_AUTH:-}
+    networks:
+      - ams-prod-net
+    depends_on:
+      - platform
+      - backend
+
+  # -------------------------------------------------------------
+  # Backend Fastify (no expone puertos al host en prod)
+  # -------------------------------------------------------------
+  backend:
+    build:
+      context: ../supply-chain-ams-agent/backend
+      dockerfile: Dockerfile
+    container_name: ams-prod-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      BACKEND_PORT: 8000
+      DATABASE_URL: ${DATABASE_URL:-postgres://ams_user:${POSTGRES_PASSWORD}@db:5432/ams_agent}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      WHISPER_URL: ${WHISPER_URL:-http://whisper:9000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-https://${AMS_DOMAIN}}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - ../supply-chain-ams-agent/prompts:/app/prompts:ro
+      - ams-prod-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # Platform Next.js (no expone puertos al host en prod)
+  # -------------------------------------------------------------
+  platform:
+    build:
+      context: ../supply-chain-ams-platform
+      dockerfile: Dockerfile
+    container_name: ams-prod-platform
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # El navegador llamará a /api/* a través de Caddy en el mismo dominio,
+      # o a un subdominio api.* si lo preferís.
+      NEXT_PUBLIC_AGENT_API_URL: ${NEXT_PUBLIC_AGENT_API_URL:-https://${AMS_API_DOMAIN}}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # PostgreSQL + pgvector
+  # -------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: ams-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ams_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-ams_agent}
+    volumes:
+      - ams-prod-postgres:/var/lib/postgresql/data
+      - ../supply-chain-ams-agent/database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ams_user} -d ${POSTGRES_DB:-ams_agent}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # Redis
+  # -------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: ams-prod-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - ams-prod-redis:/data
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # Worker BullMQ (RAG + transcripciones + self-training cron)
+  # -------------------------------------------------------------
+  worker:
+    build:
+      context: ../supply-chain-ams-agent/worker
+      dockerfile: Dockerfile
+    container_name: ams-prod-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgres://ams_user:${POSTGRES_PASSWORD}@db:5432/ams_agent}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    depends_on:
+      redis:
+        condition: service_started
+      db:
+        condition: service_healthy
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # Whisper (perfil "voice" — activar con --profile voice)
+  # Consume ~1 GB RAM idle, ~2 GB durante transcripción.
+  # -------------------------------------------------------------
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: ams-prod-whisper
+    restart: unless-stopped
+    profiles: ["voice"]
+    environment:
+      ASR_MODEL: ${ASR_MODEL:-base}
+      ASR_ENGINE: openai_whisper
+    networks:
+      - ams-prod-net
+
+  # -------------------------------------------------------------
+  # Observability stack (perfil "observability")
+  # -------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ams-prod-prometheus
+    restart: unless-stopped
+    profiles: ["observability"]
+    volumes:
+      - ../supply-chain-ams-agent/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ams-prod-prometheus:/prometheus
+    networks:
+      - ams-prod-net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ams-prod-grafana
+    restart: unless-stopped
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-cambiame}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ams-prod-grafana:/var/lib/grafana
+      - ../supply-chain-ams-agent/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ams-prod-net
+
+networks:
+  ams-prod-net:
+    name: ams-prod-net
+    driver: bridge
+
+volumes:
+  caddy_data:
+    name: ams-prod-caddy-data
+  caddy_config:
+    name: ams-prod-caddy-config
+  ams-prod-postgres:
+    name: ams-prod-postgres
+  ams-prod-redis:
+    name: ams-prod-redis
+  ams-prod-uploads:
+    name: ams-prod-uploads
+  ams-prod-prometheus:
+    name: ams-prod-prometheus
+  ams-prod-grafana:
+    name: ams-prod-grafana

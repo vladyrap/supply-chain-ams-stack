@@ -107,3 +107,50 @@ docker compose version
 ```
 
 Si tu versión es anterior y no podés actualizar, podés caer al método manual: levantar agent y platform por separado.
+
+---
+
+## 🚀 Deploy a producción
+
+Para poner el stack online (HTTPS, dominio propio, VPS), usá los archivos
+`docker-compose.prod.yml` + `Caddyfile.prod` + `.env.production.example` de
+este mismo repo.
+
+**Guía completa paso a paso:** [`docs/deployment.md`](docs/deployment.md)
+
+Resumen ultra rápido (asume VPS Debian/Ubuntu limpio):
+
+```bash
+# 1. En el VPS, bootstrap (instala Docker + clona los 3 repos)
+ssh root@TU_VPS
+curl -sSL https://raw.githubusercontent.com/vladyrap/supply-chain-ams-stack/main/scripts/bootstrap-vps.sh | bash
+
+# 2. Configurar .env de prod
+cd /opt/ams/supply-chain-ams-stack
+cp .env.production.example .env
+nano .env       # completar AMS_DOMAIN, GEMINI_API_KEY, POSTGRES_PASSWORD, COOKIE_SECRET, JWT_SECRET
+
+# 3. Configurar DNS: ams.tudominio.cl + api.ams.tudominio.cl → IP del VPS
+
+# 4. Deploy
+bash scripts/deploy.sh
+
+# 5. Verificar
+bash scripts/healthcheck.sh
+```
+
+Resultado: tu stack en `https://ams.tudominio.cl` con HTTPS automático
+(Let's Encrypt), reverse proxy Caddy, sin exponer puertos internos.
+
+### Scripts de ops incluidos
+
+| Script | Qué hace |
+|---|---|
+| `scripts/bootstrap-vps.sh` | Instala Docker, firewall, clona repos. Correr UNA vez. |
+| `scripts/deploy.sh` | `git pull` + build + up + smoke. Para deploys recurrentes. |
+| `scripts/backup-db.sh` | `pg_dump` a `/var/backups/ams/`. Pensado para cron diario. |
+| `scripts/restore-db.sh` | Restaura un dump. Pide confirmación explícita. |
+| `scripts/healthcheck.sh` | Verifica containers + endpoints + DNS. Exit 0 si todo OK. |
+
+Más detalle, troubleshooting y opciones avanzadas en
+[`docs/deployment.md`](docs/deployment.md).
