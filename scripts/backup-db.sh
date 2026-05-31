@@ -6,8 +6,8 @@
 #   bash scripts/backup-db.sh              # backup a /var/backups/ams/
 #   bash scripts/backup-db.sh /tmp         # backup a /tmp
 #
-# Cron sugerido (en el VPS):
-#   0 3 * * * /opt/supply-chain-ams-stack/scripts/backup-db.sh >> /var/log/ams-backup.log 2>&1
+# Cron sugerido (en el VPS, asumiendo el layout que crea bootstrap-vps.sh):
+#   0 3 * * * /opt/ams/supply-chain-ams-stack/scripts/backup-db.sh >> /var/log/ams-backup.log 2>&1
 # =============================================================
 set -euo pipefail
 

@@ -153,19 +153,22 @@ bash scripts/deploy.sh
   3. /history → click en incidente → escalar N2.
   4. /testing-intelligence → crear escenario → grabar pantalla.
   5. /escalation-n2 → ver el registro creado en paso 3.
+  6. /time-estimator → crear una estimación de prueba (ej. INCIDENT_RESOLUTION · MM · MEDIUM) → verificar que devuelve banda horas + fases + respuesta al cliente.
 
 ---
 
 ## INVENTARIO DE COMMITS ACTUALES (rebuildeables desde GitHub)
 
-| Repo | Branch | Último commit | Cambios clave |
+| Repo | Branch | Último commit local | Cambios clave |
 |---|---|---|---|
 | `supply-chain-ams-agent` | main | `8c5db48` | RBAC + auth bcrypt 12 + Jira/SN/CloudALM + IA video + Sentry |
-| `supply-chain-ams-platform` | main | `f572e63` | UX polish: Cmd+K, hero, glass cards, /welcome |
-| `supply-chain-ams-stack` | main | `88c27b2` | docker-compose.prod + Caddy + scripts ops |
+| `supply-chain-ams-platform` | main | ver `git log -1` | UX polish + Estimador de Tiempos (módulo `/time-estimator`) |
+| `supply-chain-ams-stack` | main | ver `git log -1` | docker-compose.prod + Caddy + scripts ops |
 
-El `deploy.sh` hace `git pull origin main` así que mañana va a traer
-automáticamente estos commits.
+El `deploy.sh` hace `git pull origin main` así que va a traer automáticamente
+los commits que estén en el remoto. **Antes del deploy verificá** que pusheaste
+todo lo local con `git -C /opt/ams/<repo> log origin/main..HEAD` — si devuelve
+commits, faltan en el remoto.
 
 ---
 

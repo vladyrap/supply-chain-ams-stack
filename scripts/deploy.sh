@@ -3,13 +3,15 @@
 # deploy.sh — deploy supply-chain-ams-stack en VPS
 # =============================================================
 # Uso (en el VPS):
-#   cd /opt/supply-chain-ams-stack
+#   cd /opt/ams/supply-chain-ams-stack
 #   bash scripts/deploy.sh
 #
-# Asume estructura:
-#   /opt/supply-chain-ams-stack       (este repo)
-#   /opt/supply-chain-ams-agent       (clonado al lado, hermano)
-#   /opt/supply-chain-ams-platform    (clonado al lado, hermano)
+# Asume estructura (la que crea bootstrap-vps.sh):
+#   /opt/ams/supply-chain-ams-stack       (este repo)
+#   /opt/ams/supply-chain-ams-agent       (clonado al lado, hermano)
+#   /opt/ams/supply-chain-ams-platform    (clonado al lado, hermano)
+# El script descubre los paths con dirname, así que también funciona si
+# moviste todo a otro parent dir, siempre que los 3 repos sean hermanos.
 # =============================================================
 set -euo pipefail
 
