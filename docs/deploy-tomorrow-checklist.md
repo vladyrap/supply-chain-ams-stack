@@ -1,6 +1,10 @@
-# 📋 Checklist deploy — mañana 16:00
+# 📋 Checklist deploy — VPS productivo
 
 Pre-deploy listo. Esta es la lista 1-a-1 para deployar al VPS nuevo.
+
+> **Última actualización**: 2026-06-01. Incluye smoke tests del Ticket Command
+> Center orquestador (NBA, Readiness, ETA Explainability), Visual Evidence
+> Analyzer en CreateTicketModal y Demo guiada end-to-end.
 
 ---
 
@@ -154,6 +158,31 @@ bash scripts/deploy.sh
   4. /testing-intelligence → crear escenario → grabar pantalla.
   5. /escalation-n2 → ver el registro creado en paso 3.
   6. /time-estimator → crear una estimación de prueba (ej. INCIDENT_RESOLUTION · MM · MEDIUM) → verificar que devuelve banda horas + fases + respuesta al cliente.
+
+- [ ] **Smoke tests del Ticket Command Center** (features nuevos):
+  1. /tickets → click "+ Crear ticket" → modal abre en el centro del viewport (no clipped por la card padre — confirma que ModalPortal funciona).
+  2. En el modal: drag & drop una imagen SAP → ver `VisualEvidenceUploader` analizar y detectar transacción/módulo. **Verificar que la imagen NO se persiste** (`/api/tickets` payload solo lleva `visualEvidenceNotes`).
+  3. Crear el ticket → abrir en /tickets → ver **TicketNextBestAction** card grande al tope con CTA.
+  4. Verificar **TicketReadinessScore** muestra 0-100 con breakdown.
+  5. Sección Estimación → expandir → ver **ETA Explainability** con columnas ↑ y ↓.
+  6. Probar **QuickActions** (Document Factory, Testing, Quality, Playbook) → confirmar que abren el modal del módulo correspondiente sin saltar de pantalla.
+  7. /tickets → click "Ejecutar demo completa" → ver **GuidedAmsDemo** ejecutar 13 pasos reales con SSE stream.
+
+- [ ] **Verificar audit trail** (`/audit`): los nuevos event types aparecen:
+  - `VISUAL_EVIDENCE_ATTACHED`, `VISUAL_EVIDENCE_ANALYZED`, `TICKET_ESTIMATED_WITH_VISUAL_ANALYSIS`
+  - `DEMO_STARTED`, `DEMO_STEP_COMPLETED`, `DEMO_COMPLETED`
+
+- [ ] **Generar manual del cliente** (opcional, no bloqueante):
+  ```bash
+  cd /opt/ams/supply-chain-ams-platform/docs/manual/scripts
+  npm install
+  npx playwright install chromium
+  MANUAL_BASE_URL=https://ams.tudominio.cl \
+    MANUAL_USER_EMAIL=admin@tudominio.cl \
+    MANUAL_USER_PASSWORD=tu-password \
+    npm run build
+  ```
+  Genera `../pdf/manual-{cliente,dev,sales}.pdf` (~50 MB c/u) listos para mandar al sponsor.
 
 ---
 
