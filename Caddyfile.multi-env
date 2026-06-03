@@ -1,0 +1,98 @@
+# =============================================================================
+# Caddyfile multi-env — AMS Platform DEV / QAS / PROD en mismo VPS
+# =============================================================================
+# Copiar al VPS como /etc/caddy/Caddyfile (o donde Caddy lee).
+# Reemplazar `tudominio.com` por el dominio real ANTES de levantar.
+#
+# Caddy gestiona certificados Let's Encrypt automáticamente — solo asegurate
+# que los DNS A/AAAA apunten al VPS antes del primer arranque.
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DEV
+# ─────────────────────────────────────────────────────────────────────────────
+
+dev.amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6700
+    log {
+        output file /var/log/caddy/dev-platform.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}
+
+dev-api.amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6601
+    log {
+        output file /var/log/caddy/dev-api.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# QAS
+# ─────────────────────────────────────────────────────────────────────────────
+
+qas.amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6800
+    log {
+        output file /var/log/caddy/qas-platform.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}
+
+qas-api.amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6801
+    log {
+        output file /var/log/caddy/qas-api.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+    }
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PROD
+# ─────────────────────────────────────────────────────────────────────────────
+
+amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6900
+    log {
+        output file /var/log/caddy/prod-platform.log {
+            roll_size 100mb
+            roll_keep 10
+        }
+    }
+    # Security headers básicos
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+
+api.amsplatform.tudominio.com {
+    encode gzip zstd
+    reverse_proxy localhost:6901
+    log {
+        output file /var/log/caddy/prod-api.log {
+            roll_size 100mb
+            roll_keep 10
+        }
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+    }
+}
