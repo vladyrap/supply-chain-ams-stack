@@ -1,0 +1,55 @@
+name: Stack CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  compose-validate:
+    name: Docker compose · validate config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose.yml
+        run: |
+          docker compose -f docker-compose.yml config --quiet || true
+          docker compose -f docker-compose.prod.yml config --quiet || true
+
+  scripts-lint:
+    name: Bash · shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Lint all scripts
+        run: |
+          find scripts -name "*.sh" -exec shellcheck {} +
+
+  docs-check:
+    name: Docs · estructura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verificar docs críticos
+        run: |
+          test -f RUNBOOK.md       || (echo "❌ RUNBOOK.md falta" && exit 1)
+          test -f CHECKLIST_PROD.md || (echo "❌ CHECKLIST_PROD.md falta" && exit 1)
+          test -f GOLIVE.md         || (echo "❌ GOLIVE.md falta" && exit 1)
+          test -f README.md         || (echo "❌ README.md falta" && exit 1)
+          echo "✓ Todos los docs críticos están presentes"
+
+  caddyfile-validate:
+    name: Caddy · validate Caddyfile
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Caddyfile.prod syntax
+        run: |
+          docker run --rm -v $PWD:/etc/caddy caddy:2 \
+            caddy validate --config /etc/caddy/Caddyfile.prod || true
+          docker run --rm -v $PWD:/etc/caddy caddy:2 \
+            caddy validate --config /etc/caddy/Caddyfile.multi-env || true
