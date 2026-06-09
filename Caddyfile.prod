@@ -27,9 +27,17 @@
 	}
 
 	# Frontend Next.js (Caddy resuelve por nombre del servicio en la red Docker)
+	# FIX A22 (audit v1.1.0): health check pasivo + lb_try_duration —
+	# durante deploys el container puede tardar en aceptar tráfico; sin esto
+	# Caddy enruta a backend muerto y el cliente ve 502.
 	reverse_proxy platform:3000 {
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Real-IP {remote_host}
+		health_uri /
+		health_interval 10s
+		health_timeout 3s
+		lb_try_duration 30s
+		fail_duration 30s
 	}
 
 	# Logs estructurados rotados
@@ -49,6 +57,7 @@
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
 		Referrer-Policy "no-referrer"
 		-Server
 	}
@@ -58,9 +67,15 @@
 		max_size 110MB
 	}
 
+	# FIX A22: health check pasivo en backend para evitar 502 durante deploys.
 	reverse_proxy backend:8000 {
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Real-IP {remote_host}
+		health_uri /health
+		health_interval 10s
+		health_timeout 3s
+		lb_try_duration 30s
+		fail_duration 30s
 		# Timeouts amplios para análisis de video largo (Whisper + Gemini)
 		transport http {
 			read_timeout 5m

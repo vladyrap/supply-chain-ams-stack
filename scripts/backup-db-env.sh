@@ -47,17 +47,31 @@ TS=$(date -u +%Y%m%dT%H%M%SZ)
 OUT="$BACKUP_DIR/ams_${ENV}_${TS}.sql.gz"
 
 echo "[backup-$ENV] dump $CONTAINER → $OUT"
-docker exec "$CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges \
-  | gzip > "$OUT"
 
-# Validar
+# FIX A20 (audit v1.1.0): pg_dump a archivo intermedio + gzip por separado.
+# Antes: pg_dump | gzip ocultaba fallos de pg_dump (gzip producía .gz "exitoso"
+# de 200 bytes con header válido). SIZE>1024 no detectaba dumps truncados.
+# Ahora: si pg_dump falla → exit code != 0 → set -e aborta → nunca se comprime.
+# Y gunzip -t valida integridad del .gz al final.
+TMP_SQL="$BACKUP_DIR/ams_${ENV}_${TS}.sql.tmp"
+docker exec "$CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges > "$TMP_SQL"
+gzip -f "$TMP_SQL"
+GZIP_FILE="${TMP_SQL}.gz"
+mv "$GZIP_FILE" "$OUT"
+
+# Validar tamaño + integridad gzip
 SIZE=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT")
 if [ "$SIZE" -lt 1024 ]; then
   echo "[backup-$ENV] ERROR: archivo demasiado chico ($SIZE bytes). pg_dump falló." 1>&2
   rm -f "$OUT"
   exit 1
 fi
-echo "[backup-$ENV] OK ($((SIZE / 1024)) KB)"
+if ! gunzip -t "$OUT" 2>/dev/null; then
+  echo "[backup-$ENV] ERROR: archivo corrupto (gunzip -t falló)." 1>&2
+  rm -f "$OUT"
+  exit 1
+fi
+echo "[backup-$ENV] OK ($((SIZE / 1024)) KB, integridad gzip verificada)"
 
 # Retención
 find "$BACKUP_DIR" -name "ams_${ENV}_*.sql.gz" -mtime "+$RETAIN_DAYS" -delete

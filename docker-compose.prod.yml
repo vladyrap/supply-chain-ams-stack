@@ -225,20 +225,32 @@ services:
   #   ALERTMANAGER_SMTP_FROM=alerts@tudominio.cl
   # -------------------------------------------------------------
   alertmanager:
-    image: prom/alertmanager:latest
+    # FIX A21 (audit v1.1.0): Alertmanager NO expande env vars. Usamos
+    # alpine + envsubst en entrypoint para procesar template antes de arrancar.
+    image: alpine:3.20
     container_name: ams-prod-alertmanager
     restart: unless-stopped
     profiles: ["observability"]
     volumes:
-      - ../supply-chain-ams-agent/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ../supply-chain-ams-agent/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.tmpl:ro
+      - ../supply-chain-ams-agent/observability/alertmanager/entrypoint.sh:/entrypoint.sh:ro
       - ams-prod-alertmanager:/alertmanager
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - "--config.file=/etc/alertmanager/alertmanager.yml"
-      - "--storage.path=/alertmanager"
-      - "--web.external-url=https://${AMS_DOMAIN:-ams.tudominio.cl}/alerts"
+      - |
+        apk add --no-cache gettext alertmanager curl >/dev/null 2>&1 || \
+          (wget -qO- https://github.com/prometheus/alertmanager/releases/download/v0.27.0/alertmanager-0.27.0.linux-amd64.tar.gz | tar xz -C /tmp && \
+           install /tmp/alertmanager-0.27.0.linux-amd64/alertmanager /bin/alertmanager && \
+           apk add --no-cache gettext)
+        exec /entrypoint.sh --storage.path=/alertmanager --web.external-url=https://${AMS_DOMAIN:-ams.tudominio.cl}/alerts
     environment:
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       PAGERDUTY_KEY: ${PAGERDUTY_KEY:-}
+      ALERTMANAGER_SMTP_HOST: ${ALERTMANAGER_SMTP_HOST:-}
+      ALERTMANAGER_SMTP_FROM: ${ALERTMANAGER_SMTP_FROM:-}
+      ALERTMANAGER_SMTP_USERNAME: ${ALERTMANAGER_SMTP_USERNAME:-}
+      ALERTMANAGER_SMTP_PASSWORD: ${ALERTMANAGER_SMTP_PASSWORD:-}
+      ALERTMANAGER_TO: ${ALERTMANAGER_TO:-alerts@example.com}
     depends_on:
       - prometheus
     networks:
