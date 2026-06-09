@@ -213,6 +213,34 @@ services:
     networks:
       - ams-prod-net
 
+  # -------------------------------------------------------------
+  # Alertmanager (v1.1.0 — Slack/Email/PagerDuty alert routing)
+  # Consume el config en observability/alertmanager/alertmanager.yml
+  # Vars requeridas en .env si querés notificaciones:
+  #   SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+  #   ALERTMANAGER_SMTP_HOST=smtp.resend.com
+  #   ALERTMANAGER_SMTP_FROM=alerts@tudominio.cl
+  # -------------------------------------------------------------
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: ams-prod-alertmanager
+    restart: unless-stopped
+    profiles: ["observability"]
+    volumes:
+      - ../supply-chain-ams-agent/observability/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ams-prod-alertmanager:/alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.external-url=https://${AMS_DOMAIN:-ams.tudominio.cl}/alerts"
+    environment:
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PAGERDUTY_KEY: ${PAGERDUTY_KEY:-}
+    depends_on:
+      - prometheus
+    networks:
+      - ams-prod-net
+
 networks:
   ams-prod-net:
     name: ams-prod-net
@@ -233,3 +261,5 @@ volumes:
     name: ams-prod-prometheus
   ams-prod-grafana:
     name: ams-prod-grafana
+  ams-prod-alertmanager:
+    name: ams-prod-alertmanager
