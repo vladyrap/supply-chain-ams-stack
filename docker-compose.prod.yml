@@ -118,7 +118,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-ams_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # FIX (audit v1.1.0 C3 relacionado): fail-fast si password no seteada.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required in .env}
       POSTGRES_DB: ${POSTGRES_DB:-ams_agent}
     volumes:
       - ams-prod-postgres:/var/lib/postgresql/data
@@ -202,8 +203,10 @@ services:
     restart: unless-stopped
     profiles: ["observability"]
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-cambiame}
+      # FIX C9 (audit v1.1.0): NO defaults para credenciales — fail-fast si no seteadas.
+      # Antes: GRAFANA_ADMIN_PASSWORD:-cambiame → panel abierto con admin/cambiame.
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?GRAFANA_ADMIN_USER required in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD required in .env}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ams-prod-grafana:/var/lib/grafana
