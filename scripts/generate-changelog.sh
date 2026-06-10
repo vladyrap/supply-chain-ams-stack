@@ -33,7 +33,7 @@ echo "$TAGS" | while read -r TAG; do
   fi
   echo "## $PREV" >> "$OUT"
   DATE=$(git log -1 --format=%aI "$PREV" 2>/dev/null | cut -dT -f1)
-  echo "_$DATE_" >> "$OUT"
+  echo "_${DATE}_" >> "$OUT"
   echo "" >> "$OUT"
   git log "$TAG..$PREV" --pretty=format:"- %s (%an)" --no-merges 2>/dev/null >> "$OUT" || true
   echo "" >> "$OUT"
