@@ -89,12 +89,16 @@ services:
     build:
       context: ../supply-chain-ams-platform
       dockerfile: Dockerfile
+      # v1.2.7-prod: NEXT_PUBLIC_* DEBE ir como build-arg para que quede
+      # embebido en el bundle del cliente. Como runtime-env no sirve (el JS
+      # del browser ya está compilado). Sin esto el browser pega a localhost:6601.
+      args:
+        NEXT_PUBLIC_AGENT_API_URL: ${NEXT_PUBLIC_AGENT_API_URL:-https://${AMS_API_DOMAIN}}
+        NEXT_PUBLIC_APP_VERSION: ${APP_VERSION:-dev}
     container_name: ams-prod-platform
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      # El navegador llamará a /api/* a través de Caddy en el mismo dominio,
-      # o a un subdominio api.* si lo preferís.
       NEXT_PUBLIC_AGENT_API_URL: ${NEXT_PUBLIC_AGENT_API_URL:-https://${AMS_API_DOMAIN}}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     depends_on:
@@ -106,8 +110,12 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    # v1.2.7-prod: dos redes — ams-prod-net (db, backend interno) +
+    # agendamiento_default (Caddy compartido con Calmar). Sin la red de Caddy
+    # el reverse-proxy no resuelve el hostname y devuelve 502.
     networks:
       - ams-prod-net
+      - caddy-shared
 
   # -------------------------------------------------------------
   # PostgreSQL + pgvector
@@ -260,6 +268,11 @@ networks:
   ams-prod-net:
     name: ams-prod-net
     driver: bridge
+  # v1.2.7-prod · red de Caddy compartido con Calmar (miespejo.cl + roccoai.cl)
+  # Caddy corre en agendamiento_default y debe resolver ams-prod-platform por DNS.
+  caddy-shared:
+    name: agendamiento_default
+    external: true
 
 volumes:
   caddy_data:
