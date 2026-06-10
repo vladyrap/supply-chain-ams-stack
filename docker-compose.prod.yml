@@ -79,8 +79,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    # v1.2.8-prod: backend también necesita caddy-shared para que Caddy lo resuelva
+    # por DNS. Sin esto api-ams.roccoai.cl da 502.
     networks:
       - ams-prod-net
+      - caddy-shared
 
   # -------------------------------------------------------------
   # Platform Next.js (no expone puertos al host en prod)
