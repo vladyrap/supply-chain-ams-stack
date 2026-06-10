@@ -1,0 +1,109 @@
+name: Deploy stack on tag
+
+# =============================================================================
+# v1.0.0-prod — Deploy del stack (compose + Caddy + scripts) al VPS
+# =============================================================================
+# Este workflow se dispara cuando el repo stack tagea v*-prod.
+# Hace pull del stack en el VPS y aplica cambios de compose/Caddyfile/scripts.
+# NO rebuilds containers (eso lo hacen los workflows del agent y platform).
+# =============================================================================
+
+on:
+  push:
+    tags:
+      - "v*-prod"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag del stack a desplegar (debe terminar en -prod)"
+        required: true
+
+jobs:
+  deploy:
+    name: Sync stack en VPS
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate tag
+        id: tagcheck
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          REF_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$REF_TAG}"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Tag inválido: '$TAG'"
+            exit 1
+          fi
+          if [[ "$TAG" != *-prod ]]; then
+            echo "::error::Tag '$TAG' no termina en -prod."
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Verify required secrets
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [ -z "${VPS_HOST:-}" ] && missing+=("VPS_HOST")
+          [ -z "${VPS_USER:-}" ] && missing+=("VPS_USER")
+          [ -z "${VPS_DEPLOY_PATH:-}" ] && missing+=("VPS_DEPLOY_PATH")
+          if [ "${#missing[@]}" -ne 0 ]; then
+            echo "::error::Faltan secrets: ${missing[*]}"
+            exit 1
+          fi
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.VPS_SSH_KEY }}
+
+      - name: Pin VPS host fingerprint
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.VPS_HOST_FINGERPRINT }}" >> ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Sync stack repo + restart services if compose changed
+        env:
+          TAG: ${{ steps.tagcheck.outputs.tag }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_DEPLOY_PATH: ${{ secrets.VPS_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          ssh "${VPS_USER}@${VPS_HOST}" bash -s -- "$TAG" "$VPS_DEPLOY_PATH" <<'REMOTE'
+          set -euo pipefail
+          TAG="$1"
+          DEPLOY_PATH="$2"
+          echo "==> Sync stack tag $TAG"
+          cd "$DEPLOY_PATH"
+          OLD_COMPOSE_HASH=$(sha256sum docker-compose.prod.yml | cut -d' ' -f1)
+          OLD_CADDY_HASH=$(sha256sum Caddyfile.prod 2>/dev/null | cut -d' ' -f1 || echo "none")
+          git fetch --tags --quiet
+          git checkout "tags/$TAG" --quiet
+          NEW_COMPOSE_HASH=$(sha256sum docker-compose.prod.yml | cut -d' ' -f1)
+          NEW_CADDY_HASH=$(sha256sum Caddyfile.prod 2>/dev/null | cut -d' ' -f1 || echo "none")
+
+          if [ "$OLD_COMPOSE_HASH" != "$NEW_COMPOSE_HASH" ]; then
+            echo "==> docker-compose.prod.yml cambió → up -d (sin recrear DB/Redis)"
+            docker compose -f docker-compose.prod.yml up -d
+          else
+            echo "==> compose sin cambios, skip"
+          fi
+
+          if [ "$OLD_CADDY_HASH" != "$NEW_CADDY_HASH" ]; then
+            echo "==> Caddyfile cambió → reload caddy"
+            # Reload de Caddy compartido con Calmar (no restart)
+            docker exec agendamiento-caddy-1 caddy reload --config /etc/caddy/Caddyfile 2>&1 | tail -3 || echo "(reload silencioso)"
+          else
+            echo "==> Caddyfile sin cambios, skip"
+          fi
+          echo "==> Stack sync OK"
+          REMOTE
