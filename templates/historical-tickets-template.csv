@@ -1,0 +1,11 @@
+sintoma;modulo_sap;proceso;cliente;causa_raiz;resolucion;horas_reales;prioridad
+Error M7 022 al recibir mercancía en planta 1100;MM;P2P;Cliente Norte;Centro 1100 tenía HU activa y no se asignaba al momento de la recepción;Se modificó tipo de movimiento de 101 a 105 con HU pre-creada en HU02. Se documentó procedimiento.;3.5;HIGH
+VF089 al facturar pedido 4500000123;SD;OTC;Cliente Sur;Cliente sin cuenta de mayor deudor configurada en FD02;Configurar cuenta 121001 en FD02 + asignar grupo cuentas D001. Re-ejecutar VF01.;1.2;MEDIUM
+MD04 muestra cantidades negativas en material 100023;PP;PTM;Cliente Industrial;Trabajo de proceso CO11N cancelado a medias con cantidad rework;Anular confirmaciones CO13 + reprocesar con CO11N correcto;4.0;HIGH
+KO 503 al liquidar orden interna 600045;CO;FTR;Cliente Norte;Settlement rule no estaba mantenida;KO02 → settlement rule receivers → CECO 5100 + 100%;0.8;LOW
+F5 100 cuenta no acepta imputación CECO en FB60;FI;P2P;Cliente Sur;Grupo cuentas FS00 no tenía pestaña CO/PP activa;FS00 → activar campo "CO/PP relevant";1.0;MEDIUM
+Error en CPI iFlow: connection refused a S/4HANA backend;BTP;INT;Cliente Industrial;Cloud Connector estaba abajo;Reiniciar Cloud Connector + verificar trust setup;2.5;CRITICAL
+EWM Warehouse Task no se crea en putaway;EWM;P2P;Cliente Andes;Storage Type Strategy /SCWM/PRR1 mal configurada;Configurar reglas de búsqueda por tipo de stock;3.0;HIGH
+ME21N rechaza orden por cuenta de mayor;MM;P2P;Cliente Norte;Cuenta no permitía CO/PP imputación;FS00 marcar campo;1.5;LOW
+VA01 sin precio determinado para material X+cliente Y;SD;OTC;Cliente Sur;Falta registro VK11 para combinación;VK11 crear registro condición tabla 7;0.5;LOW
+F-53 pago con descuento mal aplicado;FI;P2P;Cliente Industrial;Payment term del proveedor incorrecto;MK02 → modificar payment term a Z030;1.0;MEDIUM
