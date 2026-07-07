@@ -25,22 +25,17 @@ case "$ENV" in
   *) echo "Ambiente desconocido: $ENV"; exit 1 ;;
 esac
 
-CONTAINER="ams-db-$ENV"
+# v1.3.0 FIX: el container real es ams-<env>-db (ej. ams-prod-db), NO ams-db-<env>
+# (nombre invertido → nunca existió → backup/cron fallaban en silencio).
+CONTAINER="ams-$ENV-db"
 BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/ams}"
 BACKUP_DIR="$BACKUP_ROOT/$ENV"
 RETAIN_DAYS="${BACKUP_RETAIN_DAYS:-30}"
 
-# Cargar .env.{env} del agent para obtener credenciales
-AGENT_DIR="${AGENT_DIR:-/opt/ams/supply-chain-ams-agent}"
-ENV_FILE="$AGENT_DIR/.env.$ENV"
-[ -f "$ENV_FILE" ] || { echo "[backup] No encuentro $ENV_FILE" 1>&2; exit 1; }
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-POSTGRES_USER="${POSTGRES_USER:-ams_user}"
-POSTGRES_DB="${POSTGRES_DB:-ams_agent_$ENV}"
+# v1.3.0 FIX: las credenciales se leen del PROPIO container (su env POSTGRES_*),
+# no de un $AGENT_DIR/.env.<env> del host (que no existe en el VPS → fallaba).
+docker ps --filter "name=^${CONTAINER}$" --format '{{.Names}}' | grep -qx "$CONTAINER" \
+  || { echo "[backup-$ENV] container '$CONTAINER' no está corriendo" 1>&2; exit 1; }
 
 mkdir -p "$BACKUP_DIR"
 TS=$(date -u +%Y%m%dT%H%M%SZ)
@@ -54,7 +49,8 @@ echo "[backup-$ENV] dump $CONTAINER → $OUT"
 # Ahora: si pg_dump falla → exit code != 0 → set -e aborta → nunca se comprime.
 # Y gunzip -t valida integridad del .gz al final.
 TMP_SQL="$BACKUP_DIR/ams_${ENV}_${TS}.sql.tmp"
-docker exec "$CONTAINER" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges > "$TMP_SQL"
+# Credenciales tomadas del env del container (POSTGRES_USER/PASSWORD/DB).
+docker exec "$CONTAINER" sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner --no-privileges' > "$TMP_SQL"
 gzip -f "$TMP_SQL"
 GZIP_FILE="${TMP_SQL}.gz"
 mv "$GZIP_FILE" "$OUT"

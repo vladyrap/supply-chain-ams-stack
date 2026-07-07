@@ -9,9 +9,9 @@ name: Deploy stack on tag
 # =============================================================================
 
 on:
-  push:
-    tags:
-      - "v*-prod"
+  # v1.3.0: SIN trigger por tag. El deploy prod lo orquesta el workflow del repo
+  # AGENT (deploy.sh hace pull de agent+platform+stack desde origin/main). Este
+  # queda dispatch-only para sync AISLADO del stack, evitando SSH concurrentes.
   workflow_dispatch:
     inputs:
       tag:

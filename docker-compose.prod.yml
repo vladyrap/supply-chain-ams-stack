@@ -28,6 +28,12 @@ services:
     image: caddy:2-alpine
     container_name: ams-prod-caddy
     restart: unless-stopped
+    # v1.3.0: gateado tras profile. En este VPS el reverse-proxy es el CADDY
+    # COMPARTIDO (red externa agendamiento_default, sirve miespejo.cl + roccoai.cl),
+    # así que este caddy interno NO debe correr (chocaba en puerto 80 y hacía
+    # abortar deploy.sh). Para un deploy STANDALONE (VPS dedicado sin caddy
+    # compartido): docker compose -f docker-compose.prod.yml --profile standalone-proxy up -d
+    profiles: ["standalone-proxy"]
     ports:
       - "80:80"
       - "443:443"
