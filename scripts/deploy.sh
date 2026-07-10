@@ -62,6 +62,43 @@ $COMPOSE build $NO_CACHE backend platform
 log "Pull imágenes externas…"
 $COMPOSE pull caddy db redis 2>&1 | grep -v "^Pulled\|up to date" || true
 
+# 5b. Migraciones DB (tracked, idempotentes) contra la DB en caliente, ANTES de
+#     levantar el backend nuevo → arranca con el esquema ya migrado. Sólo corre
+#     las que faltan (según schema_migrations); una migración NUEVA que falle
+#     ABORTA el deploy sin tocar los containers (el sistema actual sigue arriba).
+#     Baseline: las 001..012 se marcaron aplicadas a mano en prod (ya estaban en
+#     el esquema), así que este paso sólo aplica de la 013 en adelante.
+MIG_DIR="$AGENT_DIR/database/migrations"
+if docker ps --filter "name=ams-prod-db" --format '{{.Names}}' | grep -q '^ams-prod-db$'; then
+  if [ -d "$MIG_DIR" ] && ls "$MIG_DIR"/*.sql >/dev/null 2>&1; then
+    log "Aplicando migraciones DB pendientes…"
+    DB_USER="$(docker exec ams-prod-db printenv POSTGRES_USER)"
+    DB_NAME="$(docker exec ams-prod-db printenv POSTGRES_DB)"
+    psql_db() { docker exec -i ams-prod-db psql -U "$DB_USER" -d "$DB_NAME" "$@"; }
+    psql_db -v ON_ERROR_STOP=1 -q -c \
+      "CREATE TABLE IF NOT EXISTS schema_migrations (filename TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now());"
+    applied=0
+    for f in $(ls -1 "$MIG_DIR"/*.sql | sort); do
+      base="$(basename "$f")"
+      done_row="$(psql_db -tAqc "SELECT 1 FROM schema_migrations WHERE filename = '$base';" | tr -d '[:space:]')"
+      [ "$done_row" = "1" ] && continue
+      log "  → aplicando $base"
+      if psql_db -v ON_ERROR_STOP=1 -q -f - < "$f"; then
+        psql_db -q -c "INSERT INTO schema_migrations (filename) VALUES ('$base') ON CONFLICT DO NOTHING;"
+        applied=$((applied + 1))
+      else
+        err "Migración $base FALLÓ. Deploy abortado (containers sin tocar; el sistema actual sigue arriba). Revisar: docker exec -i ams-prod-db psql -U $DB_USER -d $DB_NAME -f - < $f"
+        exit 1
+      fi
+    done
+    log "Migraciones nuevas aplicadas: $applied"
+  else
+    warn "No hay migraciones en $MIG_DIR — salto."
+  fi
+else
+  warn "DB no corre aún (primer deploy) — salto migraciones; se aplican en el próximo deploy."
+fi
+
 # 6. Up con downtime mínimo (re-crear sólo los containers cambiados)
 log "docker compose up -d…"
 $COMPOSE up -d --remove-orphans
